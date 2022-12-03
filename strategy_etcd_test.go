@@ -1,6 +1,7 @@
 package config_server
 
 import (
+	"fmt"
 	"net/url"
 	"testing"
 
@@ -53,4 +54,10 @@ func Test_StrategyEtcd_changeKeyScenario(t *testing.T) {
 
 	ret = <-watchChan
 	assert.Equal(t, "klm", ret)
+
+	err = etcd.Stop("abcd")
+	assert.NoError(t, err)
+
+	err = etcd.Stop("abcde")
+	assert.Error(t, fmt.Errorf("this key doesn't exist"))
 }

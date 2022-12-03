@@ -18,12 +18,16 @@ func NewStrategyEtcd(etcdConfig clientv3.Config) (*StrategyEtcd, error) {
 		return nil, err
 	}
 
-	return &StrategyEtcd{client: client}, nil
+	return &StrategyEtcd{
+		client:             client,
+		keyWatchChannelMap: make(map[string]chan string),
+	}, nil
 }
 
 func (etcd *StrategyEtcd) Watch(key string) WatchChannel {
 	watchChan := etcd.client.Watch(context.Background(), key)
 	rec := make(chan string)
+	etcd.keyWatchChannelMap[key] = rec
 
 	go func() {
 		for resp := range watchChan {
@@ -65,6 +69,7 @@ func (etcd *StrategyEtcd) Stop(key string) error {
 	}
 
 	close(watchChanel)
+	delete(etcd.keyWatchChannelMap, key)
 
 	return nil
 }
