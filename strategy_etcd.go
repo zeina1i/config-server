@@ -2,12 +2,14 @@ package config_server
 
 import (
 	"context"
+	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type StrategyEtcd struct {
-	client *clientv3.Client
+	client             *clientv3.Client
+	keyWatchChannelMap map[string]chan string
 }
 
 func NewStrategyEtcd(etcdConfig clientv3.Config) (*StrategyEtcd, error) {
@@ -19,7 +21,7 @@ func NewStrategyEtcd(etcdConfig clientv3.Config) (*StrategyEtcd, error) {
 	return &StrategyEtcd{client: client}, nil
 }
 
-func (etcd *StrategyEtcd) Watch(key string) <-chan string {
+func (etcd *StrategyEtcd) Watch(key string) WatchChannel {
 	watchChan := etcd.client.Watch(context.Background(), key)
 	rec := make(chan string)
 
@@ -52,6 +54,17 @@ func (etcd *StrategyEtcd) Set(key string, val string) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (etcd *StrategyEtcd) Stop(key string) error {
+	watchChanel, ok := etcd.keyWatchChannelMap[key]
+	if !ok {
+		return fmt.Errorf("this key doesn't exist")
+	}
+
+	close(watchChanel)
 
 	return nil
 }
