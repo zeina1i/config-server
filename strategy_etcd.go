@@ -8,8 +8,9 @@ import (
 )
 
 type StrategyEtcd struct {
-	client             *clientv3.Client
-	keyWatchChannelMap map[string]chan string
+	client           *clientv3.Client
+	keyChannelMap    map[string]chan string
+	keyCancelFuncMap map[string]context.CancelFunc
 }
 
 func NewStrategyEtcd(etcdConfig clientv3.Config) (*StrategyEtcd, error) {
@@ -19,15 +20,17 @@ func NewStrategyEtcd(etcdConfig clientv3.Config) (*StrategyEtcd, error) {
 	}
 
 	return &StrategyEtcd{
-		client:             client,
-		keyWatchChannelMap: make(map[string]chan string),
+		client:           client,
+		keyCancelFuncMap: make(map[string]context.CancelFunc),
 	}, nil
 }
 
 func (etcd *StrategyEtcd) Watch(key string) WatchChannel {
-	watchChan := etcd.client.Watch(context.Background(), key)
+	ctx, cancel := context.WithCancel(context.Background())
+	watchChan := etcd.client.Watch(ctx, key)
 	rec := make(chan string)
-	etcd.keyWatchChannelMap[key] = rec
+	etcd.keyCancelFuncMap[key] = cancel
+	etcd.keyChannelMap[key] = rec
 
 	go func() {
 		for resp := range watchChan {
@@ -63,13 +66,21 @@ func (etcd *StrategyEtcd) Set(key string, val string) error {
 }
 
 func (etcd *StrategyEtcd) Stop(key string) error {
-	watchChanel, ok := etcd.keyWatchChannelMap[key]
+	cancelFunc, ok := etcd.keyCancelFuncMap[key]
 	if !ok {
 		return fmt.Errorf("this key doesn't exist")
 	}
 
-	close(watchChanel)
-	delete(etcd.keyWatchChannelMap, key)
+	cancelFunc()
+	delete(etcd.keyCancelFuncMap, key)
+
+	channel, ok := etcd.keyChannelMap[key]
+	if !ok {
+		return fmt.Errorf("this channel doesn't exist")
+	}
+
+	close(channel)
+	delete(etcd.keyChannelMap, key)
 
 	return nil
 }
